@@ -305,18 +305,41 @@ initialize();
 
 
 // A compact map-first sheet on phones, expandable by tap or swipe.
-let sheetExpanded=false;
-function setSheet(expanded){
-  sheetExpanded=expanded;
-  document.body.classList.toggle('sheet-expanded',expanded);
-  $('#sheet-toggle').setAttribute('aria-expanded',String(expanded));
-  $('#sheet-toggle').setAttribute('aria-label',expanded?'Collapse stop list':'Expand stop list');
+let sheetState=1; // 0: map strip, 1: night controls, 2: stop list
+function setSheet(state){
+  sheetState=state;
+  document.body.classList.toggle('sheet-expanded',state===2);
+  document.body.classList.toggle('sheet-minimized',state===0);
+  document.body.classList.remove('sheet-dragging');
+  document.body.style.removeProperty('--sheet-height');
+  $('#sheet-toggle').setAttribute('aria-expanded',String(state===2));
+  $('#sheet-toggle').setAttribute('aria-label',state===0?'Open stop list':state===2?'Minimize stop list':'Expand or swipe down to minimize stop list');
+  document.querySelector('.explore').scrollTop=0;
 }
 let sheetSwiped=false;
-$('#sheet-toggle').onclick=()=>{if(sheetSwiped){sheetSwiped=false;return;}setSheet(!sheetExpanded);};
-let swipeStart=null;
-$('#sheet-toggle').addEventListener('pointerdown',e=>{sheetSwiped=false;swipeStart=e.clientY;$('#sheet-toggle').setPointerCapture(e.pointerId);});
-$('#sheet-toggle').addEventListener('pointerup',e=>{if(swipeStart!==null&&Math.abs(e.clientY-swipeStart)>25){sheetSwiped=true;setSheet(e.clientY<swipeStart);e.preventDefault();}swipeStart=null;});
-$('#explore-tab').addEventListener('click',()=>setSheet(true));
-$('#visited-tab').addEventListener('click',()=>setSheet(true));
+$('#sheet-toggle').onclick=()=>{if(sheetSwiped){sheetSwiped=false;return;}setSheet(sheetState===2?0:sheetState+1);};
+for(const grip of document.querySelectorAll('.sheet-handle,.explore>.eyebrow,.explore>.title-row')){
+  let swipeStart=null,startHeight=0;
+  grip.addEventListener('pointerdown',e=>{
+    if(!matchMedia('(max-width:700px)').matches)return;
+    sheetSwiped=false;swipeStart=e.clientY;
+    startHeight=document.querySelector('.explore').getBoundingClientRect().height;
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove',e=>{
+    if(swipeStart===null||Math.abs(e.clientY-swipeStart)<6)return;
+    document.body.classList.add('sheet-dragging');
+    document.body.style.setProperty('--sheet-height',`${Math.max(64,Math.min(innerHeight*.67,startHeight+swipeStart-e.clientY))}px`);
+  });
+  grip.addEventListener('pointerup',e=>{
+    if(swipeStart===null)return;
+    const distance=e.clientY-swipeStart;
+    if(Math.abs(distance)>25){sheetSwiped=true;setSheet(Math.max(0,Math.min(2,sheetState+(distance>0?-1:1))));e.preventDefault();}
+    else setSheet(sheetState);
+    swipeStart=null;
+  });
+  grip.addEventListener('pointercancel',()=>{swipeStart=null;setSheet(sheetState);});
+}
+$('#explore-tab').addEventListener('click',()=>setSheet(2));
+$('#visited-tab').addEventListener('click',()=>setSheet(2));
 
