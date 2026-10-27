@@ -1,5 +1,5 @@
 import { buildRoadGraph, nearestRoad, roadSample } from './road-trail.js';
-import { setupNight } from './night-trail.js';
+import { setupNight } from './night-trail.js?v=20261027-mobile2';
 import { displayCategory } from './display-category.js';
 import { findHome, homeKey, homeCenter } from './home-shapes.js';
 import { pickStopName } from './stop-names.js';
