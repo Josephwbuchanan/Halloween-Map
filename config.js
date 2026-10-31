@@ -4,7 +4,7 @@ window.HALLOWEEN_CONFIG = {
   supabaseUrl: 'https://zskwzqzmmymhdwfcmugw.supabase.co',
   supabaseKey: 'sb_publishable_w_3M81h2y9r08YnUwhgVtw_Dh6yDnZB',
   // A dedicated, non-personal Supabase Auth account powers the password-only organizer login.
-  organizerEmail: 'organizer@arrowbrooke-map.invalid',
+  organizerEmail: '',
   // Public half of the Web Push key pair. The private half lives only in
   // Supabase Edge Function secrets and is never shipped to visitors.
   vapidPublicKey: '',

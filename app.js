@@ -54,124 +54,6 @@ let neighborhoodAddresses = [];
 let addressDataLoaded = false;
 let serviceWorkerRegistrationPromise = null;
 
-function isIosDevice() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-function isStandaloneApp() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-}
-
-function prepareServiceWorker() {
-  if (!('serviceWorker' in navigator)) return null;
-  if (!serviceWorkerRegistrationPromise) {
-    serviceWorkerRegistrationPromise = navigator.serviceWorker.register('./sw.js', { scope: './' });
-  }
-  return serviceWorkerRegistrationPromise;
-}
-
-function applicationServerKey(value) {
-  const padding = '='.repeat((4 - value.length % 4) % 4);
-  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-}
-
-async function currentPushSubscription() {
-  const registration = await prepareServiceWorker();
-  return registration?.pushManager?.getSubscription() || null;
-}
-
-async function updateNotificationControls() {
-  const button = $('#notification-toggle');
-  const label = $('#notification-status');
-  if (!button || !label || !isOrganizer) return;
-
-  button.hidden = false;
-  button.disabled = false;
-  if (!isIosDevice()) {
-    label.textContent = 'Finish setup from the Halloween Map icon on your iPhone.';
-    button.textContent = 'iPhone setup instructions';
-    return;
-  }
-  if (!isStandaloneApp()) {
-    label.textContent = 'In Safari, tap Share, then Add to Home Screen. Open the new map icon to continue.';
-    button.textContent = 'How to add the map';
-    return;
-  }
-  if (!('PushManager' in window) || !('Notification' in window) || !prepareServiceWorker()) {
-    label.textContent = 'This iPhone needs iOS 16.4 or newer for map notifications.';
-    button.hidden = true;
-    return;
-  }
-  if (Notification.permission === 'denied') {
-    label.textContent = 'Notifications are blocked. Enable Halloween Map in iPhone Settings → Notifications.';
-    button.hidden = true;
-    return;
-  }
-
-  try {
-    const subscription = await currentPushSubscription();
-    label.textContent = subscription
-      ? 'New-home alerts will appear on this iPhone.'
-      : 'Get an alert whenever a resident adds a home.';
-    button.textContent = subscription ? 'Turn off iPhone alerts' : 'Turn on iPhone alerts';
-    button.dataset.subscribed = String(Boolean(subscription));
-  } catch {
-    label.textContent = 'Notifications are not ready yet. Try again after reloading the map.';
-    button.textContent = 'Retry iPhone alerts';
-  }
-}
-
-async function togglePushNotifications() {
-  if (!isIosDevice() || !isStandaloneApp()) {
-    toast('On your iPhone, open this map in Safari, tap Share → Add to Home Screen, then open the new map icon.');
-    return;
-  }
-
-  const button = $('#notification-toggle');
-  button.disabled = true;
-  try {
-    const registration = await prepareServiceWorker();
-    let subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      const { error } = await adminDb.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
-      if (error) throw error;
-      await subscription.unsubscribe();
-      toast('iPhone notifications are turned off.');
-    } else {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') throw new Error('Permission was not granted');
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey(config.vapidPublicKey)
-      });
-      const serialized = subscription.toJSON();
-      const { data: sessionData } = await adminDb.auth.getSession();
-      const { error } = await adminDb.from('push_subscriptions').upsert({
-        created_by: sessionData.session.user.id,
-        endpoint: serialized.endpoint,
-        p256dh: serialized.keys.p256dh,
-        auth: serialized.keys.auth,
-        user_agent: navigator.userAgent,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'endpoint' });
-      if (error) {
-        await subscription.unsubscribe();
-        throw error;
-      }
-      toast('iPhone notifications are on! You will be alerted when a home is added.');
-    }
-  } catch (error) {
-    const denied = 'Notification' in window && Notification.permission === 'denied';
-    toast(denied
-      ? 'Notifications were blocked. Enable Halloween Map in iPhone Settings → Notifications.'
-      : 'Could not update notifications. Please reload and try again.');
-  } finally {
-    button.disabled = false;
-    await updateNotificationControls();
-  }
-}
-
 const streetUppercaseWords = new Set(['FM']);
 
 function displayStreetName(value) {
@@ -225,80 +107,6 @@ function toast(message) {
 function status(message, live = false) {
   $('#connection').textContent = message;
   $('#connection').classList.toggle('live', live);
-}
-
-function setOrganizerMode(active) {
-  isOrganizer = active;
-  document.body.classList.toggle('organizer-mode', active);
-  $('#organizer-login').hidden = active;
-  $('#organizer-tools').hidden = !active;
-  if (active) {
-    updateNotificationControls();
-    updateExportStatus();
-  }
-  if (selectedId) showDetail(selectedId, false);
-  if (active && $('#messages-dialog')?.open) $('#organizer-messages')?.click();
-  setTimeout(syncOrganizerLiveUpdates, 0);
-}
-
-function isOrganizerSession(session) {
-  return Boolean(session?.user?.email && session.user.email.toLowerCase() === String(config.organizerEmail || '').toLowerCase());
-}
-
-function updateExportStatus() {
-  const label = $('#export-status');
-  if (!label) return;
-  const previous = localStorage.getItem('arrowbrooke-last-home-export');
-  label.textContent = previous
-    ? `Last exported ${new Date(previous).toLocaleString()}.`
-    : 'Download a backup of the current home list.';
-}
-
-function csvCell(value) {
-  const text = Array.isArray(value) ? value.join(' + ') : String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-async function exportHomeList() {
-  const button = $('#organizer-export');
-  if (!button || !isOrganizer || !adminDb) return;
-  button.disabled = true;
-  try {
-    const { data, error } = await adminDb.from('stops')
-      .select('address,title,categories,notes,created_at,lat,lng')
-      .eq('event_date', config.eventDate)
-      .eq('approval_status', 'approved')
-      .order('address');
-    if (error) throw error;
-    const headers = ['Address', 'Display name', 'Candy', 'Candy & Goodies', 'Adult treats', 'Notes', 'Added', 'Latitude', 'Longitude'];
-    const rows = (data || []).map((stop) => [
-      stop.address,
-      stop.title,
-      stop.categories?.includes('candy') ? 'Yes' : 'No',
-      stop.categories?.includes('nonfood') ? 'Yes' : 'No',
-      stop.categories?.includes('adult') ? 'Yes' : 'No',
-      stop.notes,
-      stop.created_at,
-      stop.lat,
-      stop.lng
-    ]);
-    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
-    const blobUrl = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `arrowbrooke-halloween-homes-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(blobUrl);
-    localStorage.setItem('arrowbrooke-last-home-export', new Date().toISOString());
-    updateExportStatus();
-    toast(`Exported ${rows.length} participating ${rows.length === 1 ? 'home' : 'homes'}.`);
-  } catch {
-    toast('Could not export the home list. Please sign in again and retry.');
-  } finally {
-    button.disabled = false;
-  }
 }
 
 const map = L.map('map', { zoomControl: false }).setView(config.center, config.zoom);
@@ -1168,46 +976,9 @@ async function fillAddressFromPin(lat, lng) {
 }
 
 const dialog = $('#add-dialog');
-const organizerDialog = $('#organizer-dialog');
 const directionsDialog = $('#directions-dialog');
 const formAddressInput = document.querySelector('[name="address"]');
 const formAddressOptions = $('#address-options');
-
-$('#organizer-login').onclick = () => {
-  $('#organizer-error').textContent = '';
-  $('#organizer-form').reset();
-  organizerDialog.showModal();
-  setTimeout(() => organizerDialog.querySelector('[name="password"]').focus(), 0);
-};
-$('.close-organizer').onclick = () => organizerDialog.close();
-$('#organizer-form').onsubmit = async (event) => {
-  event.preventDefault();
-  const password = new FormData(event.target).get('password');
-  const errorElement = $('#organizer-error');
-  const submitButton = $('#organizer-submit');
-  errorElement.textContent = '';
-  submitButton.disabled = true;
-  try {
-    if (!adminDb) throw new Error('Organizer login is not ready');
-    const { data, error } = await adminDb.auth.signInWithPassword({ email: config.organizerEmail, password });
-    if (error || !isOrganizerSession(data.session)) throw error || new Error('Not an organizer');
-    setOrganizerMode(true);
-    organizerDialog.close();
-    toast('Organizer mode enabled. Select a listed home to edit it.');
-  } catch {
-    await adminDb?.auth.signOut();
-    errorElement.textContent = 'That organizer password was not accepted.';
-  } finally {
-    submitButton.disabled = false;
-  }
-};
-$('#organizer-logout').onclick = async () => {
-  await adminDb?.auth.signOut();
-  setOrganizerMode(false);
-  toast('Organizer mode ended.');
-};
-$('#notification-toggle').onclick = togglePushNotifications;
-$('#organizer-export').onclick = exportHomeList;
 
 let directionsAddress = '';
 function openDirections(stop) {
@@ -1614,7 +1385,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function initialize() {
-  prepareServiceWorker()?.catch(() => {});
   if (demo) { stops = demoStops; status('Preview · Sample participating homes', true); render(); return; }
   if (!config.supabaseUrl || !config.supabaseKey) { status('Map setup in progress · Open the demo preview to explore the design.'); render(); return; }
   try {
@@ -1623,24 +1393,9 @@ async function initialize() {
     publicDb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'arrowbrooke-public-reader' }
     });
-    adminDb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey, {
-      auth: {
-        storage: window.localStorage,
-        storageKey: 'arrowbrooke-organizer-session',
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false
-      }
-    });
-    adminDb.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') setOrganizerMode(false);
-      else if (isOrganizerSession(session)) setOrganizerMode(true);
-    });
     db.auth.onAuthStateChange((event, session) => {
       currentUserId = session?.user?.id || null;
     });
-    adminDb.auth.getSession().then(({ data }) => setOrganizerMode(isOrganizerSession(data.session)))
-      .catch(() => setOrganizerMode(false));
     setInterval(() => {
       if (!document.hidden) loadStops().catch(() => status('Offline · Showing the last loaded homes.'));
     }, 120000 + Math.floor(Math.random() * 30000));
@@ -1730,54 +1485,3 @@ window.addEventListener('load', () => {
 }, { once: true });
 window.addEventListener('orientationchange', () => setTimeout(() => showWholeNeighborhood(false), 250));
 
-// The message form and private inbox share the existing map sessions.
-function setupMapMessages({ $, getDb, getAdminDb, isOrganizer, ensureVisitorSession, toast, escapeHtml }) {
- if (!$('#message-form')) return;
- const form = $('#message-form');
- const dialog = $('#message-dialog');
- const inbox = $('#messages-dialog');
- $('#help').onclick = () => { $('#message-error').textContent=''; dialog.showModal(); };
- $('#close-message').onclick = () => dialog.close();
- $('#close-messages').onclick = () => inbox.close();
- async function showInbox() {
-  inbox.showModal();
-  const list=$('#message-list');
-  if(!isOrganizer()) {
-   list.textContent='Sign in as the organizer to read map messages.';
-   $('#message-login').hidden=false;
-   return;
-  }
-  $('#message-login').hidden=true;
-  list.textContent='Loading messages…';
-  try {
-   const {data,error}=await getAdminDb().from('map_messages').select('id,message,created_at').order('created_at',{ascending:false}).limit(100);
-   if(error)throw error;
-   list.innerHTML=(data||[]).map(m=>`<article class="map-message"><time>${escapeHtml(new Date(m.created_at).toLocaleString())}</time><p>${escapeHtml(m.message)}</p></article>`).join('') || 'No messages yet.';
-  } catch { list.textContent='Could not load messages. Please sign in again and retry.'; }
- }
- $('#organizer-messages').onclick=showInbox;
- $('#message-login').onclick=()=>{inbox.close();$('#organizer-login').click();};
- form.onsubmit=async event=>{
-  event.preventDefault();
-  const errorLabel=$('#message-error');
-  const text=form.elements.message.value.trim();
-  errorLabel.textContent='';
-  if(text.length<5||text.length>400){errorLabel.textContent='Please enter a message between 5 and 400 characters.';return;}
-  const button=$('#send-message');button.disabled=true;
-  try {
-   if(!getDb())throw Error('The map is still connecting. Please try again in a moment.');
-   await ensureVisitorSession();
-   const {error}=await getDb().from('map_messages').insert({message:text});
-   if(error)throw error;
-   dialog.close();form.reset();toast('Message sent. Thank you for helping improve the map!');
-  }catch(error){errorLabel.textContent=error?.message?.includes('Please wait')?'Please wait before sending another message.':'Could not send your message. Please try again shortly.';}
-  finally{button.disabled=false;}
- };
- if(new URLSearchParams(location.search).has('message')) {
-  const cleanUrl=new URL(location.href);
-  cleanUrl.searchParams.delete('message');
-  history.replaceState(history.state,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
-  showInbox();
- }
-}
-setupMapMessages({ $, getDb: () => db, getAdminDb: () => adminDb, isOrganizer: () => isOrganizer, ensureVisitorSession, toast, escapeHtml });

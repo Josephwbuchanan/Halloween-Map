@@ -1,15 +1,12 @@
 # Personal Halloween Map backup
 
-Copied October 31, 2026 from Arrowbrooke/Halloween-Map. The neighborhood repository and database were read only and were not modified.
+Independent October 31, 2026 snapshot of Arrowbrooke/Halloween-Map, with 114 participating homes and 1,714 verified addresses. Arrowbrooke GitHub and Supabase were read only and have not been modified.
 
-- Personal site: https://josephwbuchanan.github.io/Halloween-Map/
-- Personal Supabase project: zskwzqzmmymhdwfcmugw
-- Initial snapshot: 114 approved homes for October 31, 2026, plus the verified address catalog.
-- This is an independent point-in-time copy, not a live sync. Edits do not propagate between the two sites.
-- Old personal source remains recoverable in Git history. Old personal database tables are retained in the private personal_legacy_20261031 schema.
-- Imported listings have no visitor ownership in this separate Auth project. Original creator identifiers are preserved privately for provenance.
-- Organizer login must be created separately. Passwords, sessions and push subscriptions are not copied.
-- Personal push notifications need separate secrets, webhook configuration and subscriptions. vapidPublicKey is deliberately blank until then.
-- Arrowbrooke Cloudflare analytics was removed so personal visits do not affect neighborhood statistics.
+Personal site: https://josephwbuchanan.github.io/Halloween-Map/
+Personal Supabase project: zskwzqzmmymhdwfcmugw
 
-Never point this backup at the neighborhood database or store private keys in this repository.
+This copy keeps normal-user controls. Developer login, developer messaging, push notifications and neighborhood analytics are disabled. No login accounts, passwords or device subscriptions were copied. The personal website remains public; an unshared link is not access control.
+
+Edits to one copy do not sync to the other. Old personal source remains in Git history, and old personal database tables are privately archived in personal_legacy_20261031. Imported homes have no visitor ownership in the personal Auth project.
+
+No private keys belong in this repository. Do not reconnect this backup to the Arrowbrooke database.

@@ -51,25 +51,9 @@
       </div>
       <div id="stop-list"></div>
       <p class="local-note">Tap a home for details and walking directions.</p>
-      <div id="organizer-tools" class="organizer-tools" hidden>
-        <strong>Organizer mode</strong>
-        <span>Select a listed home on the map to edit it.</span>
-        <div class="notification-controls">
-          <span id="notification-status">Checking iPhone notifications…</span>
-          <button id="notification-toggle" class="secondary" type="button">Turn on iPhone alerts</button>
-        </div>
-        <div class="export-controls">
-          <span id="export-status">Download a backup of the current home list.</span>
-          <button id="organizer-export" class="secondary" type="button">Export home list (CSV)</button>
-        </div>
-        <button id="organizer-messages" class="secondary" type="button">View map messages</button>
-        <button id="organizer-logout" class="secondary" type="button">Sign out</button>
-      </div>
-      <button id="organizer-login" class="organizer-link" type="button">Organizer login</button>
     </aside>
 
     <div class="map-controls">
-      <button id="help" class="map-button" aria-label="Message the developer or suggest a correction" title="Message the developer">?</button>
       <button id="home" class="map-button" aria-label="Back to ArrowBrooke" title="Back to ArrowBrooke">⌂</button>
       <button id="locate" class="map-button" aria-label="Show my location" title="My location">◎</button>
       <button id="zoom-in" class="map-button" aria-label="Zoom in">+</button>
@@ -147,21 +131,6 @@
     </div>
   </dialog>
 
-  <dialog id="organizer-dialog">
-    <form id="organizer-form">
-      <div class="dialog-top">
-        <div><div class="eyebrow">PRIVATE MAP CONTROLS</div><h2>Organizer login 🎃</h2></div>
-        <button type="button" class="icon-button close-organizer" aria-label="Close">×</button>
-      </div>
-      <p class="muted">Enter the organizer password to edit participating homes directly from the map.</p>
-      <label>Password
-        <input name="password" type="password" autocomplete="current-password" required>
-      </label>
-      <p id="organizer-error" class="error" role="alert"></p>
-      <button id="organizer-submit" class="primary" type="submit">Enter organizer mode</button>
-      <p class="fine-print">The password is checked securely by Supabase and is never stored in this website.</p>
-    </form>
-  </dialog>
 
   <dialog id="directions-dialog">
     <div class="dialog-top">
@@ -177,27 +146,12 @@
     </div>
   </dialog>
 
-  <dialog id="message-dialog">
-    <form id="message-form">
-      <div class="dialog-top"><h2>Message the developer</h2><button id="close-message" type="button" class="icon-button" aria-label="Close message">×</button></div>
-      <p class="muted">Suggest a correction or tell us what needs updating. Include the house address if your message is about a home.</p>
-      <label>Your message<textarea name="message" rows="5" minlength="5" maxlength="400" placeholder="What would you like us to update?" required></textarea></label>
-      <p class="fine-print">Your message is visible only to the organizer.</p>
-      <p id="message-error" class="error" role="alert"></p>
-      <button id="send-message" class="primary" type="submit">Send message</button>
-    </form>
-  </dialog>
-  <dialog id="messages-dialog">
-    <div class="dialog-top"><h2>Map messages</h2><button id="close-messages" class="icon-button" type="button" aria-label="Close messages">×</button></div>
-    <div id="message-list" aria-live="polite"></div>
-    <button id="message-login" class="primary" type="button" hidden>Organizer login</button>
-  </dialog>
   <div id="toast" role="status" hidden></div>
   <script src="vendor/leaflet.js"></script>
   <script src="vendor/maplibre-gl.js"></script>
   <script src="vendor/leaflet-maplibre-gl.js"></script>
   <script src="vendor/supabase.js"></script>
   <script src="config.js?v=personal-backup-20261031"></script>
-  <script src="app.js?v=20261031-viewer-scaling" type="module"></script>
+  <script src="app.js?v=personal-normal-user-20261031" type="module"></script>
 </body>
 </html>
