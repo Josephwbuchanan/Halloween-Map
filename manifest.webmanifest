@@ -1,0 +1,19 @@
+{
+  "id": "/Halloween-Map/",
+  "name": "ArrowBrooke After Dark",
+  "short_name": "Halloween Map",
+  "description": "Find participating Halloween homes around ArrowBrooke.",
+  "start_url": "/Halloween-Map/",
+  "scope": "/Halloween-Map/",
+  "display": "standalone",
+  "background_color": "#191126",
+  "theme_color": "#191126",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

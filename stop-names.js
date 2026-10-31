@@ -20,10 +20,35 @@ export const STOP_NAMES = [
   'The Hocus Pocus House','The Jack-o’-Lantern Junction','The Charmed Chimney','The Spellbound Steps','The Candy Cobweb',
   'The Pumpkin Picnic','The Boo Bonanza','The Witch’s Wagon','The Friendly Fiend','The Last Laugh Lantern'
 ];
+
+const moods = [
+  'Bewitched','Cackling','Candy-Coated','Charmed','Creepy','Dancing','Enchanted','Friendly','Ghostly','Glowing',
+  'Grinning','Haunted','Howling','Jolly','Magic','Midnight','Mischievous','Moonlit','Mysterious','Pumpkin-Lit',
+  'Shimmering','Spooky','Starry','Twilight','Wicked','Wobbly'
+];
+const places = [
+  'Bungalow','Cabin','Castle','Corner','Cottage','Crypt','Doorstep','Driveway','Front Door','Garage','Garden','Gateway',
+  'Hideaway','House','Landing','Lodge','Manor','Porch','Stoop','Terrace','Treat Stop','Welcome'
+];
+const creatures = [
+  'Bat','Black Cat','Friendly Fiend','Ghost','Goblin','Grinning Gargoyle','Jack-o’-Lantern','Little Monster','Moon Witch',
+  'Mummy','Night Owl','Phantom','Pumpkin','Skeleton','Specter','Spider','Trickster','Vampire','Werewolf','Witch'
+];
+const treasures = [
+  'Boo Basket','Candy Cache','Candy Cauldron','Candy Chest','Candy Stash','Goodie Garden','Goodie Grab','Goodie Trove',
+  'Magic Morsels','Midnight Munchies','Monster Munch','Snack Shack','Spooky Sweets','Sugar Spell','Treat Basket',
+  'Treat Caravan','Treat Chest','Treat Retreat','Treat Trove','Twilight Treats'
+];
+const generatedStopNames = [
+  ...moods.flatMap((mood) => places.map((place) => `The ${mood} ${place}`)),
+  ...creatures.flatMap((creature) => treasures.map((treasure) => `The ${creature}’s ${treasure}`))
+];
+const allStopNames = [...new Set([...STOP_NAMES, ...generatedStopNames])];
+
 export function pickStopName(existingNames = [], random = Math.random) {
   const used = new Set(existingNames.map(n=>String(n).trim().toLowerCase()));
-  const available = STOP_NAMES.filter(n=>!used.has(n.toLowerCase()));
-  const pool = available.length ? available : STOP_NAMES;
+  const available = allStopNames.filter(n=>!used.has(n.toLowerCase()));
+  const pool = available.length ? available : allStopNames;
   const base = pool[Math.floor(random()*pool.length)];
   if(available.length)return base;
   let number=2;
