@@ -1,3 +1,6 @@
+import { buildRoadGraph, nearestRoad, roadSample } from './road-trail.js?v=personal-cart-v1';
+import { createRoadCache } from './road-cache.js?v=personal-cart-v1';
+import { setupNight } from './night-trail.js?v=personal-cart-v1';
 import { displayCategory } from './display-category.js?v=20261028-category-colors';
 import { distanceToHome, findHome, homeKey, homeCenter } from './home-shapes.js';
 import { pickStopName } from './stop-names.js?v=20261028-many-names';
@@ -1368,9 +1371,15 @@ function loadStops() {
     let data;
     do {
       revision = stopsRealtimeRevision;
-      const result = await (publicDb || db).from('stops').select('*').eq('event_date', config.eventDate).eq('approval_status', 'approved').order('created_at');
-      if (result.error) throw result.error;
-      data = result.data || [];
+      const reader = publicDb || db;
+      const [mirrored, own] = await Promise.all([
+        reader.from('neighborhood_homes').select('record'),
+        reader.from('stops').select('*').eq('event_date', config.eventDate).eq('approval_status', 'approved').is('neighborhood_source_id', null).order('created_at')
+      ]);
+      if (mirrored.error || own.error) throw mirrored.error || own.error;
+      const merged = new Map((mirrored.data || []).map(({record}) => [normalizeAddressText(record.address_key || record.address), {...record,created_by:null,mirrored:true}]));
+      for (const stop of own.data || []) merged.set(normalizeAddressText(stop.address_key || stop.address), stop);
+      data = [...merged.values()].sort((x,y) => String(x.created_at || '').localeCompare(String(y.created_at || '')));
     } while (revision !== stopsRealtimeRevision);
     stops = data.filter(validPublicStop);
     render();
@@ -1400,6 +1409,8 @@ async function initialize() {
       if (!document.hidden) loadStops().catch(() => status('Offline · Showing the last loaded homes.'));
     }, 120000 + Math.floor(Math.random() * 30000));
     await loadStops();
+    night?.ready();
+    refreshFromNeighborhood();
     const requested = new URLSearchParams(location.search).get('stop');
     if (requested) showDetail(requested);
   } catch { status('Could not connect to the neighborhood map. Please try reloading.'); render(); }
@@ -1408,6 +1419,52 @@ async function initialize() {
 map.on('zoomend', render);
 updateSubmissionAvailability();
 setInterval(updateSubmissionAvailability, 60000);
+
+let night = null;
+const roadCache = createRoadCache(() => streetMap, () => night?.refreshRoads());
+streetMap?.on('idle', () => roadCache.collect());
+let lastTrailData = '', lastTrailPaint = '';
+function paintStreetTrail(paths, paint) {
+  if (!streetMap?.isStyleLoaded()) return;
+  const data = {type:'FeatureCollection',features:paths.map(path => ({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:path.map(p => [p[1],p[0]])}}))};
+  const encoded=JSON.stringify(data), key=paint.color+':'+paint.width;
+  if (!streetMap.getSource('our-haunted-trail')) {
+    streetMap.addSource('our-haunted-trail',{type:'geojson',data});
+    const label=streetMap.getStyle().layers.find(l=>l.type==='symbol'&&l['source-layer']==='transportation_name')?.id;
+    streetMap.addLayer({id:'our-trail-ink',type:'line',source:'our-haunted-trail',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':paint.color,'line-width':paint.width+1,'line-opacity':1}},label);
+    lastTrailData=encoded;lastTrailPaint=key;return;
+  }
+  if(lastTrailData!==encoded){streetMap.getSource('our-haunted-trail').setData(data);lastTrailData=encoded;}
+  if(lastTrailPaint!==key){streetMap.setPaintProperty('our-trail-ink','line-width',paint.width+1);streetMap.setPaintProperty('our-trail-ink','line-color',paint.color);lastTrailPaint=key;}
+}
+night=setupNight({L,map,getDb:()=>db,ensureSession:ensureVisitorSession,inNeighborhood,demo,toast,
+ roadGraph:()=>roadCache.graph(),paintTrail:paintStreetTrail,
+ snapPoint:(lat,lng)=>{roadCache.collect();const p=nearestRoad(roadCache.graph(),lat,lng);return p?{lat:p.lat,lng:p.lng}:null;},
+ onLocation:(lat,lng)=>{lastUserLatLng=[lat,lng];if(userMarker)userMarker.setLatLng(lastUserLatLng);else userMarker=L.marker(lastUserLatLng,{icon:locationMarkerIcon(),zIndexOffset:1000}).addTo(map);},
+ demoPath:()=>{try{return streetMap?roadSample(streetMap.querySourceFeatures('openmaptiles',{sourceLayer:'transportation_name'})):null;}catch{return null;}}
+});
+let neighborhoodRefresh = null, lastNeighborhoodCheck = 0;
+function refreshFromNeighborhood(manual=false) {
+ if (neighborhoodRefresh) return neighborhoodRefresh;
+ if (!publicDb || demo) return Promise.resolve();
+ const button=$('#refresh-homes'),label=$('#sync-status');
+ button.disabled=true;label.textContent='Checking neighborhood homes…';
+ neighborhoodRefresh=(async()=>{
+  try{
+   const {data,error}=await publicDb.rpc('refresh_neighborhood_homes');
+   if(error||data?.status==='error'||data?.error)throw error||new Error(data.error);
+   await loadStops();lastNeighborhoodCheck=Date.now();
+   label.textContent=data?.last_success?'Updated '+new Date(data.last_success).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Neighborhood refresh queued';
+   if(manual)toast('Homes refreshed. Your personal additions are preserved.');
+  }catch{label.textContent='Refresh unavailable · Saved homes retained';if(manual)toast('Could not refresh right now. Your saved homes are still here.');}
+  finally{button.disabled=false;neighborhoodRefresh=null;}
+ })();
+ return neighborhoodRefresh;
+}
+$('#refresh-homes').onclick=()=>refreshFromNeighborhood(true);
+setInterval(()=>{if(!document.hidden)refreshFromNeighborhood();},300000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastNeighborhoodCheck>300000)refreshFromNeighborhood();});
+
 initialize();
 
 function setSheet(expanded) {
@@ -1484,4 +1541,6 @@ window.addEventListener('load', () => {
   setTimeout(() => showWholeNeighborhood(false), innerWidth <= 700 ? 450 : 0);
 }, { once: true });
 window.addEventListener('orientationchange', () => setTimeout(() => showWholeNeighborhood(false), 250));
+
+
 
